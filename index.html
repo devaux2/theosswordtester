@@ -96,6 +96,7 @@
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
         // Scene setup
         const scene = new THREE.Scene();
@@ -114,6 +115,19 @@
         // Effect Composer for post-processing
         const composer = new EffectComposer(renderer);
         composer.setSize(window.innerWidth, window.innerHeight);
+
+        // Render Pass
+        const renderPass = new RenderPass(scene, camera);
+        composer.addPass(renderPass);
+
+        // Bloom Pass
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.8, // strength
+            0.5, // radius
+            0.2  // threshold
+        );
+        composer.addPass(bloomPass);
 
         // Chromatic Aberration Shader
         const ChromaticAberrationShader = {
@@ -149,10 +163,7 @@
             `
         };
 
-        // Post-processing passes
-        const renderPass = new RenderPass(scene, camera);
-        composer.addPass(renderPass);
-
+        // Chromatic Aberration Pass
         const chromaticAberrationPass = new ShaderPass(ChromaticAberrationShader);
         composer.addPass(chromaticAberrationPass);
 
@@ -160,8 +171,8 @@
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
-        // Top-down spotlight
-        const topSpotlight = new THREE.SpotLight(0xffffff, 40);
+        // Top-down spotlight (Increased intensity)
+        const topSpotlight = new THREE.SpotLight(0xffffff, 60); // Increased from 40 to 60
         topSpotlight.position.set(0, 10, 0);
         topSpotlight.angle = Math.PI / 3;
         topSpotlight.penumbra = 0.2;
@@ -205,6 +216,15 @@
         rimLight.decay = 1;
         rimLight.distance = 20;
         scene.add(rimLight);
+
+        // Floor
+        const floorGeometry = new THREE.PlaneGeometry(50, 50);
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2; // Rotate to make it horizontal
+        floor.position.y = -4; // Position 4 units below
+        floor.receiveShadow = true;
+        scene.add(floor);
 
         // Controls
         const controls = new OrbitControls(camera, renderer.domElement);
