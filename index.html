@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Three.js Model Viewer</title>
+    <title>Theos sword demo</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -98,12 +98,16 @@
         import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
+        // Import shaders for volumetric lighting
+        import { VolumetricLightShader } from 'three/addons/shaders/VolumetricLightShader.js';
+        import { AdditiveBlendingShader } from 'three/addons/shaders/AdditiveBlendingShader.js';
+
         // Scene setup
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111111);
         scene.fog = new THREE.FogExp2(0x111111, 0.02);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
         camera.position.set(5, 5, 5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -120,109 +124,53 @@
         const renderPass = new RenderPass(scene, camera);
         composer.addPass(renderPass);
 
-        // Bloom Pass
+        // Bloom Pass (adjust parameters as needed)
         const bloomPass = new UnrealBloomPass(
             new THREE.Vector2(window.innerWidth, window.innerHeight),
-            0.24, // strength
-            0.2, // radius
-            0.2  // threshold
+            0.24, // Bloom strength
+            0.5,  // Radius
+            0.2   // Threshold
         );
         composer.addPass(bloomPass);
 
-        // Chromatic Aberration Shader
-        const ChromaticAberrationShader = {
-            uniforms: {
-                'tDiffuse': { value: null },
-                'offset': { value: new THREE.Vector2(0.005, 0.005) }
-            },
-            vertexShader: /* glsl */`
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-                }
-            `,
-            fragmentShader: /* glsl */`
-                uniform sampler2D tDiffuse;
-                uniform vec2 offset;
-                varying vec2 vUv;
+        // Create render targets for occlusion and god rays
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const rtTextureColors = new THREE.WebGLRenderTarget(width, height);
+        const rtTextureDepth = new THREE.WebGLRenderTarget(width, height);
+        const rtTextureGodRays = new THREE.WebGLRenderTarget(width, height);
 
-                void main() {
-                    vec2 center = vec2(0.5, 0.5);
-                    float dist = distance(vUv, center);
+        // God Rays Shader Pass
+        const godRaysPass = new ShaderPass(VolumetricLightShader);
+        composer.addPass(godRaysPass);
 
-                    // Increase effect towards edges
-                    vec2 aberration = offset * pow(dist, 4.0) * 2.0;
-
-                    float r = texture2D(tDiffuse, vUv + aberration).r;
-                    float g = texture2D(tDiffuse, vUv).g;
-                    float b = texture2D(tDiffuse, vUv - aberration).b;
-
-                    gl_FragColor = vec4(r, g, b, 1.0);
-                }
-            `
-        };
-
-        // Chromatic Aberration Pass
-        const chromaticAberrationPass = new ShaderPass(ChromaticAberrationShader);
-        composer.addPass(chromaticAberrationPass);
+        // Additive Blending Shader Pass
+        const finalPass = new ShaderPass(AdditiveBlendingShader);
+        composer.addPass(finalPass);
 
         // Lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
-        // Top-down spotlight (Reduced intensity)
-        const topSpotlight = new THREE.SpotLight(0xffffff, 30); // Reduced from 60 to 30
-        topSpotlight.position.set(0, 10, 0);
-        topSpotlight.angle = Math.PI / 3;
-        topSpotlight.penumbra = 0.2;
-        topSpotlight.decay = 0.5;
-        topSpotlight.distance = 100;
-        topSpotlight.castShadow = true;
-        topSpotlight.shadow.bias = -0.001;
-        topSpotlight.shadow.mapSize.width = 2048;
-        topSpotlight.shadow.mapSize.height = 2048;
-        topSpotlight.target.position.set(0, 0, 0);
-        scene.add(topSpotlight);
-        scene.add(topSpotlight.target);
+        // Create a bright point light to act as the sun
+        const sunPosition = new THREE.Vector3(0, 1000, -1000);
+        const sunLight = new THREE.PointLight(0xffffff, 1.5, 0, 2);
+        sunLight.position.copy(sunPosition);
+        scene.add(sunLight);
 
-        // Bottom-up spotlight
-        const bottomSpotlight = new THREE.SpotLight(0xffffff, 20);
-        bottomSpotlight.position.set(0, -10, 0);
-        bottomSpotlight.angle = Math.PI / 3;
-        bottomSpotlight.penumbra = 0.2;
-        bottomSpotlight.decay = 0.5;
-        bottomSpotlight.distance = 100;
-        bottomSpotlight.castShadow = true;
-        bottomSpotlight.shadow.bias = -0.001;
-        bottomSpotlight.shadow.mapSize.width = 2048;
-        bottomSpotlight.shadow.mapSize.height = 2048;
-        bottomSpotlight.target.position.set(0, 0, 0);
-        scene.add(bottomSpotlight);
-        scene.add(bottomSpotlight.target);
+        // Add a mesh to represent the sun
+        const sunGeometry = new THREE.SphereGeometry(50, 32, 32);
+        const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+        sunMesh.position.copy(sunPosition);
+        scene.add(sunMesh);
 
-        const rightLight = new THREE.PointLight(0xff0066, 20);
-        rightLight.position.set(8, 3, 0);
-        scene.add(rightLight);
-
-        const leftLight = new THREE.PointLight(0x0066ff, 20);
-        leftLight.position.set(-8, 3, 0);
-        scene.add(leftLight);
-
-        const rimLight = new THREE.SpotLight(0xffffff, 25);
-        rimLight.position.set(0, 2, -6);
-        rimLight.angle = Math.PI / 4;
-        rimLight.penumbra = 0.5;
-        rimLight.decay = 1;
-        rimLight.distance = 20;
-        scene.add(rimLight);
-
-        // Floor (Moved further down)
-        const floorGeometry = new THREE.PlaneGeometry(50, 50);
+        // Floor
+        const floorGeometry = new THREE.PlaneGeometry(1000, 1000);
         const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2; // Rotate to lay it flat
-        floor.position.y = -10; // Moved floor from -4 to -10
+        floor.position.y = -10; // Floor position
         floor.receiveShadow = true; // Allow the floor to receive shadows
         scene.add(floor);
 
@@ -296,10 +244,6 @@
             if (name && window.objectsLibrary.has(name)) {
                 window.currentObject = window.objectsLibrary.get(name);
                 scene.add(window.currentObject);
-                rimLight.target = window.currentObject;
-                scene.add(rimLight.target);
-                topSpotlight.target = window.currentObject;
-                bottomSpotlight.target = window.currentObject;
             }
 
             updateObjectSwitcher();
@@ -367,12 +311,43 @@
 
             if (window.currentObject) {
                 window.currentObject.rotation.y += 0.005;
-
-                const angle = window.currentObject.rotation.y;
-                rimLight.position.x = Math.sin(angle) * 6;
-                rimLight.position.z = -Math.cos(angle) * 6;
             }
 
+            // Update light position in screen space
+            const sunScreenPosition = sunPosition.clone().project(camera);
+
+            // Update uniforms for god rays shader
+            godRaysPass.uniforms['lightPosition'].value.set(
+                sunScreenPosition.x * 0.5 + 0.5,
+                sunScreenPosition.y * 0.5 + 0.5
+            );
+            godRaysPass.uniforms['density'].value = 0.96;
+            godRaysPass.uniforms['decay'].value = 0.93;
+            godRaysPass.uniforms['weight'].value = 0.4;
+            godRaysPass.uniforms['exposure'].value = 0.6;
+
+            // Render scene into render target for god rays
+            renderer.setRenderTarget(rtTextureColors);
+            renderer.clear();
+            renderer.render(scene, camera);
+
+            // Render only the sun into depth render target
+            const occlusionScene = new THREE.Scene();
+            occlusionScene.add(sunMesh);
+            renderer.setRenderTarget(rtTextureDepth);
+            renderer.clear();
+            renderer.render(occlusionScene, camera);
+
+            // Apply god rays effect
+            godRaysPass.uniforms['tDiffuse'].value = rtTextureDepth.texture;
+            renderer.setRenderTarget(rtTextureGodRays);
+            renderer.clear();
+            composer.render();
+
+            // Final composite
+            finalPass.uniforms['tDiffuse'].value = rtTextureColors.texture;
+            finalPass.uniforms['tAdd'].value = rtTextureGodRays.texture;
+            renderer.setRenderTarget(null);
             composer.render();
         }
         animate();
