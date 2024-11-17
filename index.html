@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Theos sword demo</title>
+    <title>Theos sword thing</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
@@ -98,9 +98,85 @@
         import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-        // Import shaders for volumetric lighting
-        import { VolumetricLightShader } from 'three/addons/shaders/VolumetricLightShader.js';
-        import { AdditiveBlendingShader } from 'three/addons/shaders/AdditiveBlendingShader.js';
+        // Since VolumetricLightShader and AdditiveBlendingShader are not available via imports,
+        // we include them directly in the script.
+
+        // VolumetricLightShader
+        const VolumetricLightShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                lightPosition: { value: new THREE.Vector2(0.5, 0.5) },
+                exposure: { value: 0.6 },
+                decay: { value: 0.93 },
+                density: { value: 0.96 },
+                weight: { value: 0.4 },
+                samples: { value: 50 }
+            },
+            vertexShader: /* glsl */`
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: /* glsl */`
+                varying vec2 vUv;
+                uniform sampler2D tDiffuse;
+                uniform vec2 lightPosition;
+                uniform float exposure;
+                uniform float decay;
+                uniform float density;
+                uniform float weight;
+                uniform int samples;
+
+                void main() {
+                    const int MAX_SAMPLES = 100;
+                    vec2 texCoord = vUv;
+                    vec2 deltaTextCoord = texCoord - lightPosition;
+                    deltaTextCoord *= 1.0 / float(samples) * density;
+                    vec4 color = vec4(0.0);
+                    float illuminationDecay = 1.0;
+
+                    for(int i=0; i < MAX_SAMPLES; i++) {
+                        if(i == samples) break;
+                        texCoord -= deltaTextCoord;
+                        vec4 sample = texture2D(tDiffuse, texCoord);
+                        sample *= illuminationDecay * weight;
+                        color += sample;
+                        illuminationDecay *= decay;
+                    }
+                    gl_FragColor = color * exposure;
+                }
+            `
+        };
+
+        // AdditiveBlendingShader
+        const AdditiveBlendingShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                tAdd: { value: null }
+            },
+            vertexShader: /* glsl */`
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: /* glsl */`
+                uniform sampler2D tDiffuse;
+                uniform sampler2D tAdd;
+                varying vec2 vUv;
+
+                void main() {
+                    vec4 color = texture2D(tDiffuse, vUv);
+                    vec4 add = texture2D(tAdd, vUv);
+                    gl_FragColor = color + add;
+                }
+            `
+        };
+
+        // Rest of your JavaScript code remains the same.
 
         // Scene setup
         const scene = new THREE.Scene();
@@ -342,7 +418,7 @@
             godRaysPass.uniforms['tDiffuse'].value = rtTextureDepth.texture;
             renderer.setRenderTarget(rtTextureGodRays);
             renderer.clear();
-            composer.render();
+            godRaysPass.render(renderer);
 
             // Final composite
             finalPass.uniforms['tDiffuse'].value = rtTextureColors.texture;
