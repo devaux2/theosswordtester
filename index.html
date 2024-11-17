@@ -171,8 +171,8 @@
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
-        // Top-down spotlight (Increased intensity)
-        const topSpotlight = new THREE.SpotLight(0xffffff, 60); // Increased from 40 to 60
+        // Top-down spotlight (Reduced intensity)
+        const topSpotlight = new THREE.SpotLight(0xffffff, 30); // Reduced from 60 to 30
         topSpotlight.position.set(0, 10, 0);
         topSpotlight.angle = Math.PI / 3;
         topSpotlight.penumbra = 0.2;
@@ -217,13 +217,13 @@
         rimLight.distance = 20;
         scene.add(rimLight);
 
-        // Floor
+        // Floor (Moved further down)
         const floorGeometry = new THREE.PlaneGeometry(50, 50);
         const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2; // Rotate to make it horizontal
-        floor.position.y = -4; // Position 4 units below
-        floor.receiveShadow = true;
+        floor.rotation.x = -Math.PI / 2; // Rotate to lay it flat
+        floor.position.y = -10; // Moved floor from -4 to -10
+        floor.receiveShadow = true; // Allow the floor to receive shadows
         scene.add(floor);
 
         // Controls
